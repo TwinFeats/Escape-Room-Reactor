@@ -2,14 +2,14 @@
 #include <arduino-timer.h>
 #include <NeoPixelBrightnessBus.h>
 #include <ButtonDebounce.h>
-#define PJON_MAX_PACKETS 2
+#define PJON_MAX_PACKETS 4
 #define PJON_PACKET_MAX_LENGTH 33
 #include <PJONSoftwareBitBang.h>
 #include "../../Escape Room v2 Master/src/tracks.h"
 
 #define PIN_BEAM_LEDS       1
 #define PIN_MARKER_LEDS     2
-#define PIN_ENTER           3
+#define PIN_ENTER_BUTTON    3
 #define PIN_BEAM_BUTTON     4
 #define PIN_MARKER_BUTTON   5
 #define PIN_POWER_LIGHT     6
@@ -111,7 +111,7 @@ NeoPixelBrightnessBus<NeoRgbFeature, Neo400KbpsMethod> blackboxBeamLights(
 NeoPixelBrightnessBus<NeoGrbFeature, Neo400KbpsMethod> blackboxMarkerLights(
     64, PIN_MARKER_LEDS);
 ButtonDebounce bbBeamButton(PIN_BEAM_BUTTON, 100);
-ButtonDebounce bbGuessButton(PIN_ENTER, 100);
+ButtonDebounce bbGuessButton(PIN_ENTER_BUTTON, 100);
 ButtonDebounce bbMarkerButton(PIN_MARKER_BUTTON, 100);
 Timer<1> bbBeamJoystickTimer;
 Timer<1> bbMarkerJoystickTimer;
@@ -130,9 +130,31 @@ RgbColor innerLights[64];
 
 int rodX[5], rodY[5];
 
+void blackboxComplete() {
+  activated = false;
+  digitalWrite(PIN_POWER_LIGHT, LOW);
+  send((uint8_t *)"D", 1);
+}
+
 void bbGuessPressed(const int state) {
   if (activated && state == LOW) {
-
+    int count = 0;
+    for (int x=0;x<8;x++) {
+      for (int y=0;y<8;y++) {
+        int idx = y*8+x;
+        if (innerLights[idx] != black) {
+          for (int i=0;i<5;i++) {
+            if (rodX[i] == x && rodY[i] == y) {
+              count++;
+            }
+          }
+        }
+      }
+    }
+    if (count == 5) {
+      //got it!
+      blackboxComplete();
+    }
   };
 }
 
@@ -150,7 +172,7 @@ bool hitRod(int x, int y) {
 void placeBeamMarker(RgbColor color, int loc) {
   outerLights[loc] = color;
   int computedLight = loc;
-  if (computedLight < 8) computedLight = 7 - computedLight;
+//  if (computedLight < 8) computedLight = 7 - computedLight; //The first light strip is no longer rotated
   blackboxBeamLights.SetPixelColor(computedLight, color);
   blackboxBeamLights.Show();
 }
@@ -345,12 +367,13 @@ bool checkMarkerJoystick(void *t) {
     }
   }
   if (prevMarkerLight != currentMarkerLight) {
-    blackboxMarkerLights.SetPixelColor(prevMarkerLight,
-                                       black);  // is default color black?
+    blackboxMarkerLights.SetPixelColor(prevMarkerLight, black);
+    innerLights[prevMarkerLight] = black;
     prevMarkerLight = currentMarkerLight;
     //    prevMarkerColor =
     //    blackboxMarkerLights.GetPixelColor(currentMarkerLight);
     blackboxMarkerLights.SetPixelColor(currentMarkerLight, yellow);
+    innerLights[currentMarkerLight] = yellow;
     blackboxMarkerLights.Show();
   }
 
@@ -358,7 +381,7 @@ bool checkMarkerJoystick(void *t) {
 }
 
 void initBlackbox() {
-  pinMode(PIN_ENTER, INPUT_PULLUP);
+  pinMode(PIN_ENTER_BUTTON, INPUT_PULLUP);
   pinMode(PIN_BEAM_BUTTON, INPUT_PULLUP);
   pinMode(PIN_MARKER_BUTTON, INPUT_PULLUP);
   blackboxMarkerLights.Begin();
