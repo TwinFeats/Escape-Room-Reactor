@@ -7,12 +7,12 @@
 #include <PJONSoftwareBitBang.h>
 #include "../../Escape Room v2 Master/src/tracks.h"
 
-#define PIN_BEAM_LEDS       1
-#define PIN_MARKER_LEDS     2
-#define PIN_ENTER_BUTTON    3
-#define PIN_BEAM_BUTTON     4
-#define PIN_MARKER_BUTTON   5
-#define PIN_POWER_LIGHT     6
+#define PIN_BEAM_LEDS       2
+#define PIN_MARKER_LEDS     3
+#define PIN_ENTER_BUTTON    4
+#define PIN_BEAM_BUTTON     5
+#define PIN_MARKER_BUTTON   6
+#define PIN_POWER_LIGHT     7
 // X and Y are reversed from the joystick since I need to mount these with the
 // pins facing up
 #define PIN_BEAM_X          A1
@@ -41,9 +41,6 @@ RgbColor darkSeaGreen = colorGamma.Correct(RgbColor(143, 188, 143));
 RgbColor orange = colorGamma.Correct(RgbColor(255, 165, 0));
 RgbColor turquoise = colorGamma.Correct(RgbColor(175, 238, 238));
 RgbColor plum = colorGamma.Correct(RgbColor(221, 160, 221));
-
-int oneShotCount = 0;
-Timer<10, millis, int> oneShotTimers;
 
 boolean activated = false;
 
