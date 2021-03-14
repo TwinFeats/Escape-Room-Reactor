@@ -3,7 +3,7 @@
 #include <NeoPixelBrightnessBus.h>
 #include <ButtonDebounce.h>
 #define PJON_MAX_PACKETS 4
-#define PJON_PACKET_MAX_LENGTH 33
+#define PJON_PACKET_MAX_LENGTH 52
 #include <PJONSoftwareBitBang.h>
 #include "../../Escape Room v2 Master/src/tracks.h"
 
@@ -70,11 +70,13 @@ void commReceive(uint8_t *data, uint16_t len, const PJON_Packet_Info &info) {
 }
 
 void sendLcd(char *line1, char *line2) {
-  uint8_t msg[33];
+  uint8_t msg[35];
   msg[0] = 'L';
-  strncpy((char *)&msg[1], line1, 16);
-  strncpy((char *)&msg[17], line2, 16);
-  send(msg, 33);
+  strncpy((char *)&msg[1], line1, 17);
+  strncpy((char *)&msg[18], line2, 17);
+  Serial.print("Sending ");
+  Serial.println((char *)msg);
+  send(msg, 35);
 }
 
 void sendMp3(int track) {
