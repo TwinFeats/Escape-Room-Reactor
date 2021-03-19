@@ -42,13 +42,43 @@ RgbColor orange = colorGamma.Correct(RgbColor(255, 165, 0));
 RgbColor turquoise = colorGamma.Correct(RgbColor(175, 238, 238));
 RgbColor plum = colorGamma.Correct(RgbColor(221, 160, 221));
 
+NeoPixelBrightnessBus<NeoRgbFeature, Neo400KbpsMethod> blackboxBeamLights(
+    32, PIN_BEAM_LEDS);
+NeoPixelBrightnessBus<NeoGrbFeature, Neo400KbpsMethod> blackboxMarkerLights(
+    64, PIN_MARKER_LEDS);
+ButtonDebounce bbBeamButton(PIN_BEAM_BUTTON, 100);
+ButtonDebounce bbGuessButton(PIN_ENTER_BUTTON, 100);
+ButtonDebounce bbMarkerButton(PIN_MARKER_BUTTON, 100);
+Timer<1> bbBeamJoystickTimer;
+Timer<1> bbMarkerJoystickTimer;
+Timer<1> beamButtonTimer;
+
+int currentBeamLight = 0, currentMarkerLight = 0;
+int prevBeamLight = 0, prevMarkerLight = 0;
+int nextColorIndex = 2, hitColorIndex = 0, reflectColorIndex = 1;
+
+RgbColor beamColors[] = {red,       yellow,       blue,   green, cyan,   pink,
+                         turquoise, yellowGreen,  orange, coral, purple, olive,
+                         rosyBrown, darkSeaGreen, plum,   beige};
+
+RgbColor outerLights[32];
+RgbColor innerLights[64];
+
+int rodX[5], rodY[5];
+
 boolean activated = false;
 
 PJON<SoftwareBitBang> bus(14);
 
 void send(uint8_t *msg, uint8_t len) {
   bus.send(1, msg, len);
-  bus.update();
+  while (bus.update()) {};//wait for send to be completed
+}
+
+void send(const char *msg, int len) {
+  uint8_t buf[35];
+  memcpy(buf, msg, len);
+  send(buf, len);
 }
 
 void error_handler(uint8_t code, uint16_t data, void *custom_pointer) {
@@ -66,6 +96,8 @@ void commReceive(uint8_t *data, uint16_t len, const PJON_Packet_Info &info) {
 
   } else if (data[0] == 'L') {  //player has lost
 
+  } else if (data[0] == 'B') {  //brightness
+    blackboxBeamLights.SetBrightness(data[1]);
   }
 }
 
@@ -105,29 +137,6 @@ void initComm() {
 
 /* ----------------- BLACKBOX ----------------------*/
 
-NeoPixelBrightnessBus<NeoRgbFeature, Neo400KbpsMethod> blackboxBeamLights(
-    32, PIN_BEAM_LEDS);
-NeoPixelBrightnessBus<NeoGrbFeature, Neo400KbpsMethod> blackboxMarkerLights(
-    64, PIN_MARKER_LEDS);
-ButtonDebounce bbBeamButton(PIN_BEAM_BUTTON, 100);
-ButtonDebounce bbGuessButton(PIN_ENTER_BUTTON, 100);
-ButtonDebounce bbMarkerButton(PIN_MARKER_BUTTON, 100);
-Timer<1> bbBeamJoystickTimer;
-Timer<1> bbMarkerJoystickTimer;
-Timer<1> beamButtonTimer;
-
-int currentBeamLight = 0, currentMarkerLight = 0;
-int prevBeamLight = 0, prevMarkerLight = 0;
-int nextColorIndex = 2, hitColorIndex = 0, reflectColorIndex = 1;
-
-RgbColor beamColors[] = {red,       yellow,       blue,   green, cyan,   pink,
-                         turquoise, yellowGreen,  orange, coral, purple, olive,
-                         rosyBrown, darkSeaGreen, plum,   beige};
-
-RgbColor outerLights[32];
-RgbColor innerLights[64];
-
-int rodX[5], rodY[5];
 
 void blackboxComplete() {
   activated = false;
@@ -387,8 +396,8 @@ void initBlackbox() {
   blackboxMarkerLights.Show();
   blackboxBeamLights.Begin();
   blackboxBeamLights.Show();
-  blackboxBeamLights.SetBrightness(100);
-  blackboxMarkerLights.SetBrightness(100);
+  blackboxBeamLights.SetBrightness(128);
+  blackboxMarkerLights.SetBrightness(128);
 
   for (int i = 0; i < 5; i++) {
   repeat:
