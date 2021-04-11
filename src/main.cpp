@@ -51,7 +51,6 @@ ButtonDebounce bbGuessButton(PIN_ENTER_BUTTON, 100);
 ButtonDebounce bbMarkerButton(PIN_MARKER_BUTTON, 100);
 Timer<1> bbBeamJoystickTimer;
 Timer<1> bbMarkerJoystickTimer;
-Timer<1> beamButtonTimer;
 
 int currentBeamLight = 0, currentMarkerLight = 0;
 int prevBeamLight = 0, prevMarkerLight = 0;
@@ -63,6 +62,7 @@ RgbColor beamColors[] = {red,       yellow,       blue,   green, cyan,   pink,
 
 RgbColor outerLights[32];
 RgbColor innerLights[64];
+RgbColor markerLights[64];
 
 int rodX[5], rodY[5];
 
@@ -98,10 +98,11 @@ void commReceive(uint8_t *data, uint16_t len, const PJON_Packet_Info &info) {
 
   } else if (data[0] == 'B') {  //brightness
     blackboxBeamLights.SetBrightness(data[1]);
+    blackboxBeamLights.Show();
   }
 }
 
-void sendLcd(char *line1, char *line2) {
+void sendLcd(const char *line1, const char *line2) {
   uint8_t msg[35];
   msg[0] = 'L';
   strncpy((char *)&msg[1], line1, 17);
@@ -141,16 +142,18 @@ void initComm() {
 void blackboxComplete() {
   activated = false;
   digitalWrite(PIN_POWER_LIGHT, LOW);
-  send((uint8_t *)"D", 1);
+  send("D", 1);
 }
 
 void bbGuessPressed(const int state) {
+  int markerCount = 0;
   if (activated && state == LOW) {
     int count = 0;
     for (int x=0;x<8;x++) {
       for (int y=0;y<8;y++) {
         int idx = y*8+x;
-        if (innerLights[idx] != black) {
+        if (markerLights[idx] != black) {
+          markerCount++;
           for (int i=0;i<5;i++) {
             if (rodX[i] == x && rodY[i] == y) {
               count++;
@@ -159,15 +162,27 @@ void bbGuessPressed(const int state) {
         }
       }
     }
-    if (count == 5) {
+    if (count == 5 && markerCount == 5) { //to catch cheaters just marking every square
       //got it!
       blackboxComplete();
+    } else {
+      sendMp3(TRACK_WRONG);
     }
   };
 }
 
 void bbMarkerPressed(const int state) {
   if (!activated || state == HIGH) return;
+  if (markerLights[currentMarkerLight] == black) {
+    blackboxMarkerLights.SetPixelColor(currentMarkerLight, yellow);
+    innerLights[currentMarkerLight] = yellow;
+    markerLights[currentMarkerLight] = yellow;
+  } else {
+    blackboxMarkerLights.SetPixelColor(currentMarkerLight, black);
+    innerLights[currentMarkerLight] = black;
+    markerLights[currentMarkerLight] = black;
+  }
+  blackboxMarkerLights.Show();
 }
 
 bool hitRod(int x, int y) {
@@ -245,9 +260,9 @@ void fireBeam() {
       int temp = -deltaX;
       deltaX = -deltaY;
       deltaY = temp;
-      row += deltaY;
-      col += deltaX;
-      continue;
+      // row += deltaY;
+      // col += deltaX;
+//      continue;
     } else if (hitRod(x2, y2)) {  // rod on other side
       if (row < 0 || row == 8 || col < 0 || col == 8) { //start on perimeter but trying to deflect, this is reflection
         placeBeamMarker(beamColors[reflectColorIndex], currentBeamLight);
@@ -257,9 +272,9 @@ void fireBeam() {
       int temp = deltaX;
       deltaX = deltaY;
       deltaY = temp;
-      row += deltaY;
-      col += deltaX;
-      continue;
+      // row += deltaY;
+      // col += deltaX;
+//      continue;
     }
     row += deltaY;  // advance
     col += deltaX;
@@ -273,17 +288,15 @@ void fireBeam() {
   }
 }
 
-bool checkBeamButton(void *t) {
-  int state = digitalRead(PIN_BEAM_BUTTON);
-  if (!activated || state == HIGH) return true;
+void checkBeamButton(int state) {
+  if (!activated || state == HIGH) return;
   if (nextColorIndex == 15) {
     //out of guesses - play message and flash lights?
-    return true;
+    return;
   }
   if (black == outerLights[currentBeamLight]) {
     fireBeam();
   }
-  return true;
 }
 
 bool checkBeamJoystick(void *t) {
@@ -329,10 +342,10 @@ bool checkBeamJoystick(void *t) {
   }
   if (prevBeamLight != currentBeamLight) {
     int computedLight = currentBeamLight;
-    if (computedLight < 8) computedLight = 7 - computedLight;
+//    if (computedLight < 8) computedLight = 7 - computedLight;
     if (outerLights[prevBeamLight] == black) {
       int prevComputed = prevBeamLight;
-      if (prevComputed < 8) prevComputed = 7 - prevComputed;
+//      if (prevComputed < 8) prevComputed = 7 - prevComputed;
       blackboxBeamLights.SetPixelColor(prevComputed, black);
       blackboxBeamLights.Show();
     }
@@ -375,11 +388,13 @@ bool checkMarkerJoystick(void *t) {
     }
   }
   if (prevMarkerLight != currentMarkerLight) {
-    blackboxMarkerLights.SetPixelColor(prevMarkerLight, black);
-    innerLights[prevMarkerLight] = black;
+    /*
+    Restore light from saved value
+    */
+    blackboxMarkerLights.SetPixelColor(prevMarkerLight, markerLights[prevMarkerLight]);
+    innerLights[prevMarkerLight] = markerLights[prevMarkerLight];
+
     prevMarkerLight = currentMarkerLight;
-    //    prevMarkerColor =
-    //    blackboxMarkerLights.GetPixelColor(currentMarkerLight);
     blackboxMarkerLights.SetPixelColor(currentMarkerLight, yellow);
     innerLights[currentMarkerLight] = yellow;
     blackboxMarkerLights.Show();
@@ -408,29 +423,56 @@ void initBlackbox() {
     }
     rodX[i] = x;
     rodY[i] = y;
+//    int idx = y*8+x;
+//    markerLights[idx] = yellow;
+//    blackboxMarkerLights.SetPixelColor(idx, yellow);
   }
+  blackboxMarkerLights.Show();
   for (int i = 0; i < 32; i++) {
     outerLights[i] = black;
   }
   blackboxBeamLights.Show();
   for (int i = 0; i < 64; i++) {
     innerLights[i] = black;
+    markerLights[i] = black;
   }
   blackboxMarkerLights.Show();
-  //  bbBeamButton.setCallback(bbBeamPressed);
   bbGuessButton.setCallback(bbGuessPressed);
   bbMarkerButton.setCallback(bbMarkerPressed);
+  bbBeamButton.setCallback(checkBeamButton);
   bbBeamJoystickTimer.every(200, checkBeamJoystick);
   bbMarkerJoystickTimer.every(200, checkMarkerJoystick);
-  beamButtonTimer.every(200, checkBeamButton);
 }
 /* --------------END BLACKBOX ----------------------*/
 
 
+void startup() {
+  delay(8000*3 + 1000);  //wait for modem, firewall, control
+  digitalWrite(PIN_POWER_LIGHT, HIGH);
+  for (int i=0;i<32;i++) {
+    blackboxBeamLights.SetPixelColor(i, red);
+    blackboxBeamLights.Show();
+    delay(500);
+    blackboxBeamLights.SetPixelColor(i, black);
+    blackboxBeamLights.Show();
+  }
+  blackboxBeamLights.Show();
+  blackboxMarkerLights.SetPixelColor(0, yellow);
+  blackboxMarkerLights.Show();
+  delay(500);
+  blackboxMarkerLights.SetPixelColor(0, black);
+  blackboxMarkerLights.Show();
+  char line1[17], line2[17];
+  for (int i=0;i<5;i++) {
+    sprintf(line1, "Rod %i", (i+1));
+    sprintf(line2, "row %i, col %i", rodY[i], rodX[i]);
+    sendLcd(line1, line2);    
+  }
+  digitalWrite(PIN_POWER_LIGHT, LOW);
+}
+
 void setup() {
   Serial.begin(9600);
-  //  while (!Serial)
-  //    ;  // wait for serial attach
   Serial.println("Starting");
   randomSeed(analogRead(0));
   pinMode(PIN_POWER_LIGHT, OUTPUT);
@@ -438,12 +480,16 @@ void setup() {
   delay(2000);
   initComm();
   initBlackbox();
+
+  startup();
 }
 
 void loop() {
   bbBeamJoystickTimer.tick();
   bbMarkerJoystickTimer.tick();
-  beamButtonTimer.tick();
+  bbBeamButton.update();
+  bbMarkerButton.update();
+  bbGuessButton.update();
 
   bus.update();
   bus.receive(750);
